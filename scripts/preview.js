@@ -1,20 +1,39 @@
 #!/usr/bin/env node
 
 /**
- * Runs `vite preview` binding to the host/port expected by Firebase App Hosting.
- * Firebase provides the desired port through the PORT environment variable.
+ * Starts a Vite preview server bound to the host/port required by Firebase App Hosting.
+ * We use Vite's Node API so we can force the port exposed via the PORT env variable.
  */
-const { spawn } = require('child_process');
 
-const port = process.env.PORT || '8080';
+const port = Number(process.env.PORT || 8080);
 
-const child = spawn(
-  'npx',
-  ['vite', 'preview', '--host', '0.0.0.0', '--port', port],
-  { stdio: 'inherit', shell: true }
-);
+async function start() {
+  try {
+    const { preview } = await import('vite');
 
-child.on('exit', (code) => {
-  process.exit(code ?? 0);
-});
+    const server = await preview({
+      preview: {
+        port,
+        host: '0.0.0.0',
+        strictPort: true,
+      },
+    });
 
+    console.log(`[preview] listening on 0.0.0.0:${port}`);
+
+    const close = async () => {
+      console.log('[preview] shutting down');
+      await server.close();
+      process.exit(0);
+    };
+
+    process.on('SIGTERM', close);
+    process.on('SIGINT', close);
+  } catch (error) {
+    console.error('[preview] failed to start');
+    console.error(error);
+    process.exit(1);
+  }
+}
+
+start();
