@@ -1,0 +1,45 @@
+name: Rollout Validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate-rollout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Reinstall production dependencies only
+        run: |
+          rm -rf node_modules
+          npm ci --omit=dev
+
+      - name: Smoke test production server start
+        run: |
+          node scripts/serve.js &
+          SERVER_PID=$!
+          for i in {1..10}; do
+            if curl -sSf http://127.0.0.1:8080 > /dev/null; then
+              RESULT=0
+              break
+            fi
+            sleep 1
+          done
+          kill $SERVER_PID || true
+          exit ${RESULT:-1}
