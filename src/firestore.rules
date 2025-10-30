@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Helper function to check if user is staff
+    function isStaff() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff';
+    }
+    
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Anyone authenticated can read their own user data
+      allow read: if isAuthenticated();
+      
+      // Only admin can create/update/delete users
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Advances collection
+    match /advances/{advanceId} {
+      // Admin can do everything
+      allow read, write: if isAdmin();
+      
+      // Staff can only read their own advances
+      allow read: if isStaff() && resource.data.staffId == request.auth.uid;
+    }
+    
+    // Expenses collection
+    match /expenses/{expenseId} {
+      // Admin can do everything
+      allow read, write: if isAdmin();
+      
+      // Staff can create and read their own expenses
+      allow create: if isStaff() && request.resource.data.userId == request.auth.uid;
+      allow read: if isStaff() && resource.data.userId == request.auth.uid;
+      
+      // Staff can update their own expenses if not yet settled
+      allow update: if isStaff() && 
+                       resource.data.userId == request.auth.uid && 
+                       resource.data.settlementStatus == 'pending';
+    }
+    
+    // Admin Expenses collection
+    match /adminExpenses/{expenseId} {
+      // Only admin can read/write
+      allow read, write: if isAdmin();
+    }
+    
+    // Collections collection
+    match /collections/{collectionId} {
+      // Admin can do everything
+      allow read, write: if isAdmin();
+      
+      // Staff can create and read their own collections
+      allow create: if isStaff() && request.resource.data.staffId == request.auth.uid;
+      allow read: if isStaff() && resource.data.staffId == request.auth.uid;
+    }
+    
+    // Transport Payments collection
+    match /transportPayments/{paymentId} {
+      // Admin can do everything
+      allow read, write: if isAdmin();
+      
+      // Staff can create and read their own payments
+      allow create: if isStaff() && request.resource.data.userId == request.auth.uid;
+      allow read: if isStaff() && resource.data.userId == request.auth.uid;
+      
+      // Staff can update their own payments
+      allow update: if isStaff() && resource.data.userId == request.auth.uid;
+    }
+  }
+}
